@@ -11,28 +11,90 @@ import os
 #import pyble
 
 class MainHandler(tornado.web.RequestHandler):
-
-    def initialize(self):
+	def initialize(self):
 		print "init"
 
-    def get(self, playlist=None):
+	def get(self):
 		print "get"
 
-application = tornado.web.Application(
-[
-	# Nodes (discover nodes and list enabled nodes)
-	(r"/gap/nodes?passive=1", GetScanPassive),
-	(r"/gap/nodes?active=1", GetScanActive),
-	(r"/gap/nodes?enable=1", GetEnableAllNodes),
-	(r"/gap/nodes/<node>", GetEnabledNodeWithIdentified), 
 
-	# Nodes (enabling or disabling connection of nodes)
-	(r"/gap/nodes/<node>?connect=1(&interval=<interval>&latency=<latency>&enable=1)", PutConnectingTheIdentifiedNode),
-	(r"/gap/nodes/<node>?enable=0", PutDisconnectingTheIdentifiedNode), 	
+class StartScanAndListEnablingDiscover(tornado.web.RequestHandler):
+	def initialize(self):
+		# Requests (discover nodes and list enabled nodes):
+		self.write( 'GetStartScanAndListEnablingDiscover ')
 
-	# Perform a name discovery of the node identified by handle <node>.
-	(r"/gap/nodes/<node>?name=1", GetNameDiscoveryIdentifiedNode),
+	def get(self):
+		# /gap/nodes?passive=1
+		# /gap/nodes?active=1
+		# /gap/nodes?enable=1
+		passive = self.get_argument('passive', '0')
+		active = self.get_argument('active', '0')
+		enable = self.get_argument('enable', '0')
+		if passive == '1':
+			'''
+			The gateway will perform passive scan for nodes. 
+			Used scan parameters are decided by the gateway.
+			Note: Just perform, and response somethings(state?).
+			'''
+			self.write( 'passive scan')
 
+		elif active == '1':
+			'''
+			The gateway will perform active scan for nodes. 
+			Used scan parameters are decided by the gateway.
+			Note: Just perform, and response somethings(state?).
+			'''
+			self.write( 'active scan')
+		elif enable == '1':
+			'''
+			The gateway will return a list of enabled devices 
+			(devices that are either connected or will be connected when available and at gateway power-up)
+			'''
+			self.write( 'make connection')
+		else :
+			self.write( 'Bad Request')
+
+class DataWithEnabledNode(tornado.web.RequestHandler):
+	def initialize(self):
+		# The gateway will return data for an enabled node identified by the handle <node>.
+		self.write( 'GetDataWithEnableNode ')
+
+	def get(self, node):
+		self.write(node)
+
+	def put(self, node):
+		#Enable and connect to the node identified by <node>. The gateway will try to use the connection 
+		#interval <interval> and the connection latency <latency>. If left out, default values will be used. 
+		#The gateway will try to reconnect to the device if the connection is lost or at gateway power-up.
+
+		#Remove the node <node> from the list of enabled nodes.
+		connect = self.get_argument('connect', '0')
+		interval = self.get_argument('interval', '0')
+		latency = self.get_argument('latency', '0')
+		enable = self.get_argument('enable', '0')
+		name = self.get_argument('enable', '')
+
+
+		if connect == '1':
+			if enable == '1':
+				self.write( 'Enable and connect to the node identified by <node> <br> ')
+				self.write( 'latency ' + latency)
+				self.write( 'interval ' + interval)
+			else :
+				self.write( 'Remove the node <node> from the list of enabled nodes. <br> ')
+		elif name != '':
+			self.write('Perform a name discovery of the node identified by handle <node>.')
+
+class DiscoverServicesWithNode(tornado.web.RequestHandler):
+	def initialize(self):
+		# The gateway will return data for an enabled node identified by the handle <node>.
+		self.write( 'DiscoverServicesWithNode ')
+
+	def get(self, node):
+		self.write(node)
+		primary = self.get_argument('primary', '0')
+
+'''
 	# Server Configuration / Exchange MTU / Not applicable
 	#
 	# Primary Service Discovery
@@ -79,14 +141,28 @@ application = tornado.web.Application(
 	# Characteristic Descriptor Value Write
 	(r"/gatt/nodes/<node>/descriptor/<descriptor>/value/<value>", PutWriteCharacteristicDescriptor),
 	(r"/gatt/nodes/<node>/descriptor/<descriptor>/value/<value>?long=1", GetWriteLongCharacteristicDescriptors),
-    (r"/(.*)", MainHandler)
+'''
+
+application = tornado.web.Application(
+[
+	# Nodes (discover nodes and list enabled nodes)
+	(r"/gap/nodes", StartScanAndListEnablingDiscover),
+	(r"/gap/nodes/(.*)", DataWithEnabledNode),
+	(r"/gatt/nodes/(.*)/services?primary=1", DiscoverServicesWithNode),
+	(r"/gatt/nodes/<node>/services?primary=1&uuid=<uuid>", GetDiscoveyPrimaryServicesByUUID),
+	(r"/gatt/nodes/<node>/services", GetFindIncludedServices),
+	(r"/gatt/nodes/<node>/services/<service>/characterist,ics", GetDiscoverAllCharacteristicsOfService),
+
+	(r"/", MainHandler)
 ])
 
+
 if __name__ == "__main__":
-    port = 8888
-    if len(sys.argv) == 2 and sys.argv[1].isdigit():
+	port = 8888
+	if len(sys.argv) == 2 and sys.argv[1].isdigit():
 		port = int(sys.argv[1])
 		print port
+
 	http_server = tornado.httpserver.HTTPServer(application)
 	http_server.listen(port)
 	
@@ -96,4 +172,4 @@ if __name__ == "__main__":
 		tornado.ioloop.IOLoop.instance().start()
 	except KeyboardInterrupt:
 		print('\nExit ..')
-    	sys.exit(0)
+		sys.exit(0)
